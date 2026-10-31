@@ -1,0 +1,16 @@
+{
+  "name": "obsidian-time-tracker",
+  "version": "1.0.0",
+  "description": "Obsidian plugin: record time for each project and work.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit && node esbuild.config.mjs production"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "obsidian": "^1.14.4",
+    "typescript": "^5.9.3"
+  }
+}
