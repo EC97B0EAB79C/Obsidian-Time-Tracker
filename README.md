@@ -31,6 +31,31 @@ day
 - To set the day, add a date: `week 2026-10-31`.
 - If you do not add a date, the plugin uses the note name (for example, a daily note `2026-10-31.md`). If the note name is not a date, the plugin uses today.
 
+## Install
+
+### From a release
+
+1. Open the [latest release](https://github.com/EC97B0EAB79C/Obsidian-Time-Tracker/releases/latest).
+2. Download `main.js`, `manifest.json` and `styles.css`.
+3. Make the folder `<vault>/.obsidian/plugins/work-timer/`. The `.obsidian` folder is hidden. Show hidden files to see it.
+4. Put the 3 files in this folder.
+5. Restart Obsidian.
+6. Open **Settings > Community plugins**. If **Restricted mode** is on, turn it off.
+7. Enable **Work Timer**.
+
+To update the plugin, replace the 3 files with the files from a newer release.
+
+### With BRAT
+
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) installs the plugin and gets the updates for you.
+
+1. Install and enable the **BRAT** community plugin.
+2. In the BRAT settings, click **Add beta plugin**.
+3. Write `EC97B0EAB79C/Obsidian-Time-Tracker` and click **Add plugin**.
+4. Enable **Work Timer** in **Settings > Community plugins**.
+
+The plugin keeps the time records in `data.json` in its plugin folder.
+
 ## Build
 
 ```bash
@@ -43,10 +68,10 @@ npm run build
 
 This makes `main.js`. Use `npm run dev` to build again each time you change `main.ts`.
 
-## Install
+## Release
 
-1. Make the folder `<vault>/.obsidian/plugins/work-timer/`.
-2. Copy `main.js`, `manifest.json` and `styles.css` into this folder.
-3. In Obsidian, open **Settings > Community plugins** and enable **Work Timer**.
+1. Set the new version in `manifest.json`, `package.json` and `versions.json`.
+2. Push the changes.
+3. Push a tag with the same version, for example `1.0.1`. Do not use a `v` before the number.
 
-The plugin keeps the time records in `data.json` in the same folder.
+GitHub Actions then builds the plugin and makes a release with `main.js`, `manifest.json` and `styles.css`.

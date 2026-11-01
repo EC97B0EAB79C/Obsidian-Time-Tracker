@@ -112,6 +112,7 @@ function suggest(input: HTMLInputElement, items: string[], id: string) {
 }
 
 class TimerView extends ItemView {
+  private open = new Map<number, boolean>(); // Keeps the open days when the view draws again.
   constructor(leaf: WorkspaceLeaf, private plugin: WorkTimer) { super(leaf); }
   getViewType() { return VIEW; }
   getDisplayText() { return "Work timer"; }
@@ -133,7 +134,9 @@ class TimerView extends ItemView {
       const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
       const items = all.filter(e => dayStart(e.start) === d.getTime());
       const box = el.createEl("details", { cls: "wt-day" });
-      box.open = i === 0;
+      const t = d.getTime();
+      box.open = this.open.get(t) ?? i === 0;
+      box.ontoggle = () => this.open.set(t, box.open);
       const s = box.createEl("summary");
       s.createSpan({ text: i === 0 ? "Today" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) });
       s.createSpan({ text: fmt(sum(items)) });
