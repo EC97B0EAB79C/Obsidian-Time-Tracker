@@ -7,9 +7,23 @@ An Obsidian plugin that records the time you use for each project and work.
 - Start and stop a timer. Only one timer runs at a time.
 - The status bar shows the timer that runs.
 - A side view shows the totals for the last 7 days and for all projects.
-- A code block in a note shows the totals for a day or a week.
+- In the side view, click an entry to change its project, work, start or end. You can also delete the entry.
+- A code block in a note shows the totals for a day or a week. The totals update while the timer runs.
 - If a note has the same name as a project or a work, the name is a link to that note.
-- If the open note has `project` or `work` in its frontmatter, the start dialog uses these values.
+- If the open note has `project` or `work` in its frontmatter, the start dialog uses these values. A value can be text or a link, for example `project: "[[Alpha]]"`.
+- If Obsidian Sync changes the time records from a different device, the plugin reads them again.
+
+## Correct an entry
+
+The timer continues when Obsidian is closed. If you forget to stop the timer, do these steps:
+
+1. Open the side view.
+2. Open the day when the timer started.
+3. Click the entry. Its end shows as "now".
+4. Set the correct **End** time.
+5. Click **Save**.
+
+To delete an entry, click **Delete**, then click **Click again to delete**.
 
 ## Commands
 
@@ -74,4 +88,4 @@ This makes `main.js`. Use `npm run dev` to build again each time you change `mai
 2. Push the changes.
 3. Push a tag with the same version, for example `1.0.1`. Do not use a `v` before the number.
 
-GitHub Actions then builds the plugin and makes a release with `main.js`, `manifest.json` and `styles.css`.
+GitHub Actions then builds the plugin and makes a release with `main.js`, `manifest.json` and `styles.css`. If the tag and the version in `manifest.json` are different, the workflow stops and makes no release.

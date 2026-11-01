@@ -11,3 +11,5 @@
 .wt-link { color: var(--link-color); cursor: pointer; }
 .wt-empty { padding-left: 8px; color: var(--text-faint); font-size: var(--font-ui-small); }
 .wt-head { font-weight: 600; border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 4px; }
+.wt-entry { padding-left: 8px; font-size: var(--font-ui-small); color: var(--text-faint); cursor: pointer; }
+.wt-entry:hover { color: var(--text-normal); }
