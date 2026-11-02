@@ -1,4 +1,4 @@
-# Push a tag with the plugin version (for example 1.0.1) to make a release.
+# Push a tag with the plugin version (for example 0.1.1) to make a release.
 name: Release
 
 on:
@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: 22
       - name: Check that the tag and the manifest version are the same
-        run: test "$GITHUB_REF_NAME" = "$(node -p 'require("./manifest.json").version')"
+        run: |
+          V=$(node -p 'require("./manifest.json").version')
+          [ "$GITHUB_REF_NAME" = "$V" ] || { echo "::error::Tag $GITHUB_REF_NAME is not the manifest version $V. Use the tag $V."; exit 1; }
       - run: npm ci
       - run: npm run build
       - run: gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css --title "$GITHUB_REF_NAME" --generate-notes
