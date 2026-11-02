@@ -86,6 +86,6 @@ This makes `main.js`. Use `npm run dev` to build again each time you change `mai
 
 1. Set the new version in `manifest.json`, `package.json` and `versions.json`.
 2. Push the changes.
-3. Push a tag with the same version, for example `1.0.1`. Do not use a `v` before the number.
+3. Push a tag with the same version, for example `0.1.1`. Do not use a `v` before the number.
 
 GitHub Actions then builds the plugin and makes a release with `main.js`, `manifest.json` and `styles.css`. If the tag and the version in `manifest.json` are different, the workflow stops and makes no release.
