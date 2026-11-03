@@ -53,6 +53,22 @@ day
 - To set the day, add a date: `week 2026-10-31`.
 - If you do not add a date, the plugin uses the note name (for example, a daily note `2026-10-31.md`). If the note name is not a date, the plugin uses today.
 
+### Time for a project or a work
+
+Add a `project:` line, a `work:` line, or both:
+
+````
+```work-timer
+project: Alpha
+```
+````
+
+- `project: Alpha` shows the total time of the project and the time of each work in it.
+- `project: Alpha` and `work: Design` show only the time of the work "Design" in the project "Alpha".
+- `work: Design` (with no project) shows the time of this work in each project.
+- The name must be the same as in the entries, with the same upper-case and lower-case letters. You can also write a link, for example `project: [[Alpha]]`.
+- These blocks show all time. To show only one day or one week, also add a `day` or `week` line, for example `week 2026-10-31`.
+
 ## Install
 
 ### From a release

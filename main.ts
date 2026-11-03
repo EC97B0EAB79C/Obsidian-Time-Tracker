@@ -33,22 +33,32 @@ export default class WorkTimer extends Plugin {
     this.addCommand({ id: "open", name: "Open view", callback: () => this.openView() });
     this.registerInterval(window.setInterval(() => this.refresh(), 30000));
 
-    // Summary block in a note: ```work-timer``` with "day" or "week" and an optional date.
+    // Summary block in a note: ```work-timer```. The lines "project: X" and "work: Y" select the entries.
+    // Other text is the period: "day" or "week" and an optional date. With a project or a work and no period, show all time.
     this.registerMarkdownCodeBlockProcessor("work-timer", (src, el, ctx) => {
       const draw = () => {
-        const [mode = "day", date] = src.trim().split(/\s+/);
-        const name = ctx.sourcePath.split("/").pop()!.replace(/\.md$/, "");
-        const m = moment(date ?? name, "YYYY-MM-DD", true);
-        const last = (m.isValid() ? m : moment()).startOf("day");
-        const first = last.clone().subtract(mode === "week" ? 6 : 0, "days");
-        const items = this.data.entries.filter(e =>
-          e.start >= first.valueOf() && e.start < last.clone().add(1, "day").valueOf());
+        const f: Record<string, string | undefined> = {};
+        const period = src.replace(/^\s*(project|work)\s*:(.*)$/gim, (_, k: string, v: string) => {
+          f[k.toLowerCase()] = text(v.trim().replace(/^(["'])(.*)\1$/, "$2")); // Also accept "Name" and [[Name]].
+          return "";
+        }).trim();
+        const by = f.project || f.work;
+        let items = this.data.entries.filter(e => (!f.project || e.project === f.project) && (!f.work || e.work === f.work));
+        let label = by ?? "";
+        if (period || !by) {
+          const [mode, date] = period.split(/\s+/);
+          const name = ctx.sourcePath.split("/").pop()!.replace(/\.md$/, "");
+          const m = moment(date ?? name, "YYYY-MM-DD", true);
+          const last = (m.isValid() ? m : moment()).startOf("day");
+          const first = last.clone().subtract(mode === "week" ? 6 : 0, "days");
+          items = items.filter(e => e.start >= first.valueOf() && e.start < last.clone().add(1, "day").valueOf());
+          label = [by, mode === "week" ? `${first.format("D MMM")} to ${last.format("D MMM")}` : last.format("ddd D MMM")].filter(Boolean).join(" · ");
+        }
         el.empty();
         el.addClass("wt-view");
-        const head = el.createDiv({ cls: ["wt-row", "wt-head"] });
-        head.createSpan({ text: mode === "week" ? `${first.format("D MMM")} to ${last.format("D MMM")}` : last.format("ddd D MMM") });
-        head.createSpan({ text: fmt(sum(items)) });
-        tree(this.app, el, items);
+        row(this.app, el, label, sum(items), "wt-head");
+        if (by) rows(this.app, el, items, f.project ? "work" : "project"); // Project: each work. Work only: each project.
+        else tree(this.app, el, items);
       };
       draw();
       this.blocks.add(draw);
@@ -224,12 +234,15 @@ function tree(app: App, el: HTMLElement, items: Entry[]) {
   if (!items.length) { el.createDiv({ cls: "wt-empty", text: "No time recorded." }); return; }
   const projects = new Map<string, Entry[]>();
   items.forEach(e => projects.set(e.project, [...(projects.get(e.project) ?? []), e]));
-  projects.forEach((pItems, p) => {
-    row(app, el, p, sum(pItems), "wt-project");
-    const works = new Map<string, number>();
-    pItems.forEach(e => works.set(e.work, (works.get(e.work) ?? 0) + dur(e)));
-    works.forEach((ms, w) => row(app, el, w, ms, "wt-work"));
-  });
+  projects.forEach((pItems, p) => { row(app, el, p, sum(pItems), "wt-project"); rows(app, el, pItems, "work"); });
+}
+
+// One indented row for each project or work, with its total.
+function rows(app: App, el: HTMLElement, items: Entry[], key: "project" | "work") {
+  if (!items.length) { el.createDiv({ cls: "wt-empty", text: "No time recorded." }); return; }
+  const totals = new Map<string, number>();
+  items.forEach(e => totals.set(e[key], (totals.get(e[key]) ?? 0) + dur(e)));
+  totals.forEach((ms, n) => row(app, el, n, ms, "wt-work"));
 }
 
 // If a note has the same name, the name becomes a link to that note.
