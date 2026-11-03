@@ -1,4 +1,4 @@
-import { App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, Setting, WorkspaceLeaf, moment } from "obsidian";
+import { AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, Setting, WorkspaceLeaf, moment } from "obsidian";
 
 interface Entry { project: string; work: string; start: number; end?: number; }
 interface Data { entries: Entry[]; }
@@ -59,18 +59,19 @@ export default class WorkTimer extends Plugin {
   }
 
   async start(project: string, work: string) {
-    await this.stop(true); // Only one timer runs at a time.
+    const a = this.active;
+    if (a) a.end = Date.now(); // Only one timer runs at a time. No "await" before the push, so 2 fast calls cannot start 2 timers.
     this.data.entries.push({ project, work, start: Date.now() });
     await this.save();
     new Notice(`Started: ${project} / ${work}`);
   }
 
-  async stop(silent = false) {
+  async stop() {
     const e = this.active;
-    if (!e) { if (!silent) new Notice("No timer runs."); return; }
+    if (!e) return new Notice("No timer runs.");
     e.end = Date.now();
     await this.save();
-    if (!silent) new Notice(`Stopped: ${fmt(dur(e))}`);
+    new Notice(`Stopped: ${fmt(dur(e))}`);
   }
 
   async save() { await this.saveData(this.data); this.refresh(); }
@@ -96,26 +97,33 @@ class StartModal extends Modal {
   constructor(app: App, private plugin: WorkTimer) { super(app); }
 
   onOpen() {
-    // Fill from the frontmatter of the open note, if it has "project" or "work".
+    // Fill from the frontmatter of the open note. If it has no values, fill from the previous entry.
     const file = this.app.workspace.getActiveFile();
     const fm = file ? this.app.metadataCache.getFileCache(file)?.frontmatter : undefined;
-    let project = text(fm?.project), work = text(fm?.work);
-    const names = (k: "project" | "work") => [...new Set(this.plugin.data.entries.map(e => e[k]))];
+    const entries = this.plugin.data.entries, last = entries[entries.length - 1];
+    const project = text(fm?.project) || last?.project || "";
+    const work = text(fm?.work) || (project === last?.project ? last.work : "");
+    // Suggest the names of earlier entries (newest first), then the names of the notes.
+    const notes = this.app.vault.getMarkdownFiles().map(f => f.basename);
+    const names = (k: "project" | "work") => [...new Set([...entries.map(e => e[k]).reverse(), ...notes])];
+    const field = (name: string, value: string, items: string[]) => {
+      let input!: HTMLInputElement;
+      new Setting(this.contentEl).setName(name).addText(t => { input = t.setValue(value).inputEl; new NameSuggest(this.app, input, items); });
+      return input;
+    };
 
     this.titleEl.setText("Start timer");
-    new Setting(this.contentEl).setName("Project").addText(t => {
-      t.setValue(project).onChange(v => (project = v));
-      suggest(t.inputEl, names("project"), "wt-projects");
-    });
-    new Setting(this.contentEl).setName("Work").addText(t => {
-      t.setValue(work).onChange(v => (work = v));
-      suggest(t.inputEl, names("work"), "wt-works");
-    });
-    new Setting(this.contentEl).addButton(b => b.setButtonText("Start").setCta().onClick(async () => {
-      if (!project.trim() || !work.trim()) return new Notice("Write a project and a work.");
-      await this.plugin.start(project.trim(), work.trim());
-      this.close();
-    }));
+    const p = field("Project", project, names("project")), w = field("Work", work, names("work"));
+    const start = () => {
+      const [pv, wv] = [p.value.trim(), w.value.trim()];
+      if (!pv || !wv) return new Notice("Write a project and a work.");
+      this.close(); // Close first, so a second click or Enter cannot start a second timer.
+      this.plugin.start(pv, wv);
+    };
+    new Setting(this.contentEl).addButton(b => b.setButtonText("Start").setCta().onClick(start));
+    this.scope.register([], "Enter", e => { if (!e.isComposing) { start(); return false; } });
+    p.focus();
+    p.select(); // Selected text is easy to replace.
   }
 
   onClose() { this.contentEl.empty(); }
@@ -156,14 +164,19 @@ class EditModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-function suggest(input: HTMLInputElement, items: string[], id: string) {
-  const list = input.parentElement!.createEl("datalist", { attr: { id } });
-  items.forEach(i => list.createEl("option", { attr: { value: i } }));
-  input.setAttr("list", id);
+// Suggest the names that contain the text. Before you change the text, suggest all names.
+// Obsidian shows the list when the field gets focus or changes.
+// Use "#" fields in classes that extend Obsidian classes: a normal field can replace an Obsidian member.
+class NameSuggest extends AbstractInputSuggest<string> {
+  #names: string[]; #first: string;
+  constructor(app: App, input: HTMLInputElement, names: string[]) { super(app, input); this.#names = names; this.#first = input.value; }
+  getSuggestions(q: string) { return this.#names.filter(n => q === this.#first || n.toLowerCase().includes(q.toLowerCase())); }
+  renderSuggestion(v: string, el: HTMLElement) { el.setText(v); }
+  selectSuggestion(v: string) { this.setValue(v); this.close(); }
 }
 
 class TimerView extends ItemView {
-  private open = new Map<number, boolean>(); // Keeps the open days when the view draws again.
+  #days = new Map<number, boolean>(); // Keeps the open days when the view draws again.
   constructor(leaf: WorkspaceLeaf, private plugin: WorkTimer) { super(leaf); }
   getViewType() { return VIEW; }
   getDisplayText() { return "Work timer"; }
@@ -186,8 +199,8 @@ class TimerView extends ItemView {
       const items = all.filter(e => dayStart(e.start) === d.getTime());
       const box = el.createEl("details", { cls: "wt-day" });
       const t = d.getTime();
-      box.open = this.open.get(t) ?? i === 0;
-      box.ontoggle = () => this.open.set(t, box.open);
+      box.open = this.#days.get(t) ?? i === 0;
+      box.ontoggle = () => this.#days.set(t, box.open);
       const s = box.createEl("summary");
       s.createSpan({ text: i === 0 ? "Today" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) });
       s.createSpan({ text: fmt(sum(items)) });

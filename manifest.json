@@ -1,7 +1,7 @@
 {
   "id": "work-timer",
   "name": "Work Timer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.5.7",
   "description": "Record time for each project and work. Show totals by day, by week and by project.",
   "author": "ec97b0eab79c",

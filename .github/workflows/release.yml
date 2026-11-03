@@ -1,4 +1,4 @@
-# Push a tag with the plugin version (for example 0.1.1) to make a release.
+# Push a tag with the plugin version (for example 0.2.1) to make a release.
 name: Release
 
 on:
@@ -22,6 +22,8 @@ jobs:
           [ "$GITHUB_REF_NAME" = "$V" ] || { echo "::error::Tag $GITHUB_REF_NAME is not the manifest version $V. Use the tag $V."; exit 1; }
       - run: npm ci
       - run: npm run build
-      - run: gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Make the zip for manual install
+        run: mkdir work-timer && cp main.js manifest.json styles.css work-timer/ && zip -r "work-timer-$GITHUB_REF_NAME.zip" work-timer
+      - run: gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css "work-timer-$GITHUB_REF_NAME.zip" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
