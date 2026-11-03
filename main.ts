@@ -165,21 +165,18 @@ class EditModal extends Modal {
 }
 
 // Suggest the names that contain the text. Before you change the text, suggest all names.
-// "#" fields cannot conflict with the internal fields of Obsidian's class.
+// Obsidian shows the list when the field gets focus or changes.
+// Use "#" fields in classes that extend Obsidian classes: a normal field can replace an Obsidian member.
 class NameSuggest extends AbstractInputSuggest<string> {
-  #input: HTMLInputElement; #names: string[]; #first: string;
-  constructor(app: App, input: HTMLInputElement, names: string[]) {
-    super(app, input);
-    this.#input = input; this.#names = names; this.#first = input.value;
-    input.addEventListener("focus", () => input.dispatchEvent(new Event("input"))); // Show the suggestions when the field gets focus.
-  }
+  #names: string[]; #first: string;
+  constructor(app: App, input: HTMLInputElement, names: string[]) { super(app, input); this.#names = names; this.#first = input.value; }
   getSuggestions(q: string) { return this.#names.filter(n => q === this.#first || n.toLowerCase().includes(q.toLowerCase())); }
   renderSuggestion(v: string, el: HTMLElement) { el.setText(v); }
-  selectSuggestion(v: string) { this.#input.value = v; this.close(); } // Set the value directly, so the list does not open again.
+  selectSuggestion(v: string) { this.setValue(v); this.close(); }
 }
 
 class TimerView extends ItemView {
-  private open = new Map<number, boolean>(); // Keeps the open days when the view draws again.
+  #days = new Map<number, boolean>(); // Keeps the open days when the view draws again.
   constructor(leaf: WorkspaceLeaf, private plugin: WorkTimer) { super(leaf); }
   getViewType() { return VIEW; }
   getDisplayText() { return "Work timer"; }
@@ -202,8 +199,8 @@ class TimerView extends ItemView {
       const items = all.filter(e => dayStart(e.start) === d.getTime());
       const box = el.createEl("details", { cls: "wt-day" });
       const t = d.getTime();
-      box.open = this.open.get(t) ?? i === 0;
-      box.ontoggle = () => this.open.set(t, box.open);
+      box.open = this.#days.get(t) ?? i === 0;
+      box.ontoggle = () => this.#days.set(t, box.open);
       const s = box.createEl("summary");
       s.createSpan({ text: i === 0 ? "Today" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) });
       s.createSpan({ text: fmt(sum(items)) });
