@@ -10,8 +10,16 @@ An Obsidian plugin that records the time you use for each project and work.
 - In the side view, click an entry to change its project, work, start or end. You can also delete the entry.
 - A code block in a note shows the totals for a day or a week. The totals update while the timer runs.
 - If a note has the same name as a project or a work, the name is a link to that note.
-- If the open note has `project` or `work` in its frontmatter, the start dialog uses these values. A value can be text or a link, for example `project: "[[Alpha]]"`.
 - If Obsidian Sync changes the time records from a different device, the plugin reads them again.
+
+## Start dialog
+
+- The dialog fills in the project and the work:
+  - If the open note has `project` or `work` in its frontmatter, the dialog uses these values. A value can be text or a link, for example `project: "[[Alpha]]"`.
+  - If not, the dialog uses the project and the work of the previous entry.
+- The project text is selected. Type to replace it, or press Tab to go to the work.
+- When a field gets focus, a list shows the earlier names (newest first) and the note names. Type to make the list shorter.
+- Press Enter to select a name from the list. When the list is closed, press Enter to start the timer.
 
 ## Correct an entry
 
@@ -27,7 +35,7 @@ To delete an entry, click **Delete**, then click **Click again to delete**.
 
 ## Commands
 
-- **Start timer**: Open the dialog. Write a project and a work, then click **Start**.
+- **Start timer**: Open the dialog. Write a project and a work, then press Enter or click **Start**.
 - **Stop timer**: Stop the timer that runs.
 - **Open view**: Open the side view. You can also click the timer icon in the ribbon.
 
