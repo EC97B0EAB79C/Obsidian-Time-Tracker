@@ -58,7 +58,7 @@ day
 ### From a release
 
 1. Open the [latest release](https://github.com/EC97B0EAB79C/Obsidian-Time-Tracker/releases/latest).
-2. Download `work-timer-<version>.zip`, for example `work-timer-0.1.0.zip`.
+2. Download `work-timer-<version>.zip`, for example `work-timer-0.2.0.zip`.
 3. Extract the zip into `<vault>/.obsidian/plugins/`. This makes the folder `work-timer` with 3 files. The `.obsidian` folder is hidden. Show hidden files to see it.
 4. Restart Obsidian.
 5. Open **Settings > Community plugins**. If **Restricted mode** is on, turn it off.
@@ -93,6 +93,6 @@ This makes `main.js`. Use `npm run dev` to build again each time you change `mai
 
 1. Set the new version in `manifest.json`, `package.json` and `versions.json`.
 2. Push the changes.
-3. Push a tag with the same version, for example `0.1.1`. Do not use a `v` before the number.
+3. Push a tag with the same version, for example `0.2.1`. Do not use a `v` before the number.
 
 GitHub Actions then builds the plugin and makes a release with `main.js`, `manifest.json`, `styles.css` and `work-timer-<version>.zip`. Obsidian and BRAT use the 3 files. The zip is for manual install. If the tag and the version in `manifest.json` are different, the workflow stops and makes no release.
