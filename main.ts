@@ -1,4 +1,7 @@
-import { AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, Setting, WorkspaceLeaf, moment } from "obsidian";
+import {
+  AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, SearchResult, Setting, WorkspaceLeaf,
+  moment, prepareFuzzySearch, renderResults, sortSearchResults,
+} from "obsidian";
 
 interface Entry { project: string; work: string; start: number; end?: number; }
 interface Data { entries: Entry[]; }
@@ -33,22 +36,32 @@ export default class WorkTimer extends Plugin {
     this.addCommand({ id: "open", name: "Open view", callback: () => this.openView() });
     this.registerInterval(window.setInterval(() => this.refresh(), 30000));
 
-    // Summary block in a note: ```work-timer``` with "day" or "week" and an optional date.
+    // Summary block in a note: ```work-timer```. The lines "project: X" and "work: Y" select the entries.
+    // Other text is the period: "day" or "week" and an optional date. With a project or a work and no period, show all time.
     this.registerMarkdownCodeBlockProcessor("work-timer", (src, el, ctx) => {
       const draw = () => {
-        const [mode = "day", date] = src.trim().split(/\s+/);
-        const name = ctx.sourcePath.split("/").pop()!.replace(/\.md$/, "");
-        const m = moment(date ?? name, "YYYY-MM-DD", true);
-        const last = (m.isValid() ? m : moment()).startOf("day");
-        const first = last.clone().subtract(mode === "week" ? 6 : 0, "days");
-        const items = this.data.entries.filter(e =>
-          e.start >= first.valueOf() && e.start < last.clone().add(1, "day").valueOf());
+        const f: Record<string, string | undefined> = {};
+        const period = src.replace(/^\s*(project|work)\s*:(.*)$/gim, (_, k: string, v: string) => {
+          f[k.toLowerCase()] = text(v.trim().replace(/^(["'])(.*)\1$/, "$2")); // Also accept "Name" and [[Name]].
+          return "";
+        }).trim();
+        const by = f.project || f.work;
+        let items = this.data.entries.filter(e => (!f.project || e.project === f.project) && (!f.work || e.work === f.work));
+        let label = by ?? "";
+        if (period || !by) {
+          const [mode, date] = period.split(/\s+/);
+          const name = ctx.sourcePath.split("/").pop()!.replace(/\.md$/, "");
+          const m = moment(date ?? name, "YYYY-MM-DD", true);
+          const last = (m.isValid() ? m : moment()).startOf("day");
+          const first = last.clone().subtract(mode === "week" ? 6 : 0, "days");
+          items = items.filter(e => e.start >= first.valueOf() && e.start < last.clone().add(1, "day").valueOf());
+          label = [by, mode === "week" ? `${first.format("D MMM")} to ${last.format("D MMM")}` : last.format("ddd D MMM")].filter(Boolean).join(" · ");
+        }
         el.empty();
         el.addClass("wt-view");
-        const head = el.createDiv({ cls: ["wt-row", "wt-head"] });
-        head.createSpan({ text: mode === "week" ? `${first.format("D MMM")} to ${last.format("D MMM")}` : last.format("ddd D MMM") });
-        head.createSpan({ text: fmt(sum(items)) });
-        tree(this.app, el, items);
+        row(this.app, el, label, sum(items), "wt-head");
+        if (by) rows(this.app, el, items, f.project ? "work" : "project"); // Project: each work. Work only: each project.
+        else tree(this.app, el, items);
       };
       draw();
       this.blocks.add(draw);
@@ -103,17 +116,11 @@ class StartModal extends Modal {
     const entries = this.plugin.data.entries, last = entries[entries.length - 1];
     const project = text(fm?.project) || last?.project || "";
     const work = text(fm?.work) || (project === last?.project ? last.work : "");
-    // Suggest the names of earlier entries (newest first), then the names of the notes.
-    const notes = this.app.vault.getMarkdownFiles().map(f => f.basename);
-    const names = (k: "project" | "work") => [...new Set([...entries.map(e => e[k]).reverse(), ...notes])];
-    const field = (name: string, value: string, items: string[]) => {
-      let input!: HTMLInputElement;
-      new Setting(this.contentEl).setName(name).addText(t => { input = t.setValue(value).inputEl; new NameSuggest(this.app, input, items); });
-      return input;
-    };
 
     this.titleEl.setText("Start timer");
-    const p = field("Project", project, names("project")), w = field("Work", work, names("work"));
+    const p = field(this.contentEl, "Project", project), w = field(this.contentEl, "Work", work);
+    new NameSuggest(this.app, p, entries, "project");
+    new NameSuggest(this.app, w, entries, "work");
     const start = () => {
       const [pv, wv] = [p.value.trim(), w.value.trim()];
       if (!pv || !wv) return new Notice("Write a project and a work.");
@@ -134,17 +141,16 @@ class EditModal extends Modal {
   constructor(app: App, private plugin: WorkTimer, private e: Entry) { super(app); }
 
   onOpen() {
-    const e = this.e, f = "YYYY-MM-DDTHH:mm";
-    let { project, work } = e, start = moment(e.start).format(f), end = e.end ? moment(e.end).format(f) : "", sure = false;
-    const field = (name: string, value: string, set: (v: string) => void, type = "text") =>
-      new Setting(this.contentEl).setName(name).addText(t => { t.inputEl.type = type; t.setValue(value).onChange(set); });
+    const e = this.e, entries = this.plugin.data.entries, el = this.contentEl, f = "YYYY-MM-DDTHH:mm";
+    let sure = false;
 
     this.titleEl.setText("Edit entry");
-    field("Project", project, v => (project = v));
-    field("Work", work, v => (work = v));
-    field("Start", start, v => (start = v), "datetime-local");
-    field("End", end, v => (end = v), "datetime-local").setDesc(e.end ? "" : "Keep empty to let the timer run.");
-    new Setting(this.contentEl)
+    const p = field(el, "Project", e.project), w = field(el, "Work", e.work);
+    new NameSuggest(this.app, p, entries, "project");
+    new NameSuggest(this.app, w, entries, "work");
+    const start = field(el, "Start", moment(e.start).format(f), "datetime-local");
+    const end = field(el, "End", e.end ? moment(e.end).format(f) : "", "datetime-local", e.end ? "" : "Keep empty to let the timer run.");
+    new Setting(el)
       .addButton(b => b.setButtonText("Delete").setWarning().onClick(async () => {
         if (!sure) { sure = true; b.setButtonText("Click again to delete"); return; }
         this.plugin.data.entries.remove(e);
@@ -152,10 +158,12 @@ class EditModal extends Modal {
         this.close();
       }))
       .addButton(b => b.setButtonText("Save").setCta().onClick(async () => {
-        const s = moment(start, f, true).valueOf();
-        const stop = end ? moment(end, f, true).valueOf() : e.end ? NaN : Date.now();
-        if (!project.trim() || !work.trim() || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
-        Object.assign(e, { project: project.trim(), work: work.trim(), start: s, end: end ? stop : undefined });
+        // Read the fields now: a name selected from the list does not send a change event.
+        const [project, work] = [p.value.trim(), w.value.trim()];
+        const s = moment(start.value, f, true).valueOf();
+        const stop = end.value ? moment(end.value, f, true).valueOf() : e.end ? NaN : Date.now();
+        if (!project || !work || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
+        Object.assign(e, { project, work, start: s, end: end.value ? stop : undefined });
         await this.plugin.save();
         this.close();
       }));
@@ -164,15 +172,35 @@ class EditModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-// Suggest the names that contain the text. Before you change the text, suggest all names.
+// A text field in a modal. Returns its input.
+function field(el: HTMLElement, name: string, value: string, type = "text", desc = "") {
+  let input!: HTMLInputElement;
+  new Setting(el).setName(name).setDesc(desc).addText(t => { t.inputEl.type = type; input = t.setValue(value).inputEl; });
+  return input;
+}
+
+// Before you type (empty or filled-in text), suggest the recent names.
+// When you type, suggest the note names that match, with the same fuzzy search as the file switcher. The best match is first.
 // Obsidian shows the list when the field gets focus or changes.
 // Use "#" fields in classes that extend Obsidian classes: a normal field can replace an Obsidian member.
-class NameSuggest extends AbstractInputSuggest<string> {
-  #names: string[]; #first: string;
-  constructor(app: App, input: HTMLInputElement, names: string[]) { super(app, input); this.#names = names; this.#first = input.value; }
-  getSuggestions(q: string) { return this.#names.filter(n => q === this.#first || n.toLowerCase().includes(q.toLowerCase())); }
-  renderSuggestion(v: string, el: HTMLElement) { el.setText(v); }
-  selectSuggestion(v: string) { this.setValue(v); this.close(); }
+type Suggestion = { name: string; match?: SearchResult };
+class NameSuggest extends AbstractInputSuggest<Suggestion> {
+  #recent: string[]; #first: string;
+  constructor(app: App, input: HTMLInputElement, entries: Entry[], key: "project" | "work") {
+    super(app, input);
+    this.#recent = [...new Set(entries.map(e => e[key]).reverse())]; // Newest first.
+    this.#first = input.value;
+  }
+  getSuggestions(q: string): Suggestion[] {
+    if (!q.trim() || q === this.#first) return this.#recent.map(name => ({ name }));
+    const search = prepareFuzzySearch(q.trim());
+    const notes = [...new Set(this.app.vault.getMarkdownFiles().map(f => f.basename))];
+    const found = notes.flatMap(name => { const match = search(name); return match ? [{ name, match }] : []; });
+    sortSearchResults(found);
+    return found;
+  }
+  renderSuggestion(s: Suggestion, el: HTMLElement) { if (s.match) renderResults(el, s.name, s.match); else el.setText(s.name); }
+  selectSuggestion(s: Suggestion) { this.setValue(s.name); this.close(); }
 }
 
 class TimerView extends ItemView {
@@ -224,12 +252,15 @@ function tree(app: App, el: HTMLElement, items: Entry[]) {
   if (!items.length) { el.createDiv({ cls: "wt-empty", text: "No time recorded." }); return; }
   const projects = new Map<string, Entry[]>();
   items.forEach(e => projects.set(e.project, [...(projects.get(e.project) ?? []), e]));
-  projects.forEach((pItems, p) => {
-    row(app, el, p, sum(pItems), "wt-project");
-    const works = new Map<string, number>();
-    pItems.forEach(e => works.set(e.work, (works.get(e.work) ?? 0) + dur(e)));
-    works.forEach((ms, w) => row(app, el, w, ms, "wt-work"));
-  });
+  projects.forEach((pItems, p) => { row(app, el, p, sum(pItems), "wt-project"); rows(app, el, pItems, "work"); });
+}
+
+// One indented row for each project or work, with its total.
+function rows(app: App, el: HTMLElement, items: Entry[], key: "project" | "work") {
+  if (!items.length) { el.createDiv({ cls: "wt-empty", text: "No time recorded." }); return; }
+  const totals = new Map<string, number>();
+  items.forEach(e => totals.set(e[key], (totals.get(e[key]) ?? 0) + dur(e)));
+  totals.forEach((ms, n) => row(app, el, n, ms, "wt-work"));
 }
 
 // If a note has the same name, the name becomes a link to that note.
