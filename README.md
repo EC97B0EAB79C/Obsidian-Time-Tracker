@@ -18,7 +18,8 @@ An Obsidian plugin that records the time you use for each project and work.
   - If the open note has `project` or `work` in its frontmatter, the dialog uses these values. A value can be text or a link, for example `project: "[[Alpha]]"`.
   - If not, the dialog uses the project and the work of the previous entry.
 - The project text is selected. Type to replace it, or press Tab to go to the work.
-- When a field gets focus, a list shows the earlier names (newest first) and the note names. Type to make the list shorter.
+- When a field gets focus, a list shows the recent names (newest first). The list also shows them when the field is empty.
+- When you type, the list shows the note names that match. It uses the same fuzzy search as the file switcher, so the best match is first and the matching letters are highlighted.
 - Press Enter to select a name from the list. When the list is closed, press Enter to start the timer.
 
 ## Correct an entry

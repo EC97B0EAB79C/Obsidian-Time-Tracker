@@ -1,4 +1,7 @@
-import { AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, Setting, WorkspaceLeaf, moment } from "obsidian";
+import {
+  AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, SearchResult, Setting, WorkspaceLeaf,
+  moment, prepareFuzzySearch, renderResults, sortSearchResults,
+} from "obsidian";
 
 interface Entry { project: string; work: string; start: number; end?: number; }
 interface Data { entries: Entry[]; }
@@ -113,17 +116,15 @@ class StartModal extends Modal {
     const entries = this.plugin.data.entries, last = entries[entries.length - 1];
     const project = text(fm?.project) || last?.project || "";
     const work = text(fm?.work) || (project === last?.project ? last.work : "");
-    // Suggest the names of earlier entries (newest first), then the names of the notes.
-    const notes = this.app.vault.getMarkdownFiles().map(f => f.basename);
-    const names = (k: "project" | "work") => [...new Set([...entries.map(e => e[k]).reverse(), ...notes])];
-    const field = (name: string, value: string, items: string[]) => {
+    const recent = (k: "project" | "work") => [...new Set(entries.map(e => e[k]).reverse())]; // Newest first.
+    const field = (name: string, value: string, names: string[]) => {
       let input!: HTMLInputElement;
-      new Setting(this.contentEl).setName(name).addText(t => { input = t.setValue(value).inputEl; new NameSuggest(this.app, input, items); });
+      new Setting(this.contentEl).setName(name).addText(t => { input = t.setValue(value).inputEl; new NameSuggest(this.app, input, names); });
       return input;
     };
 
     this.titleEl.setText("Start timer");
-    const p = field("Project", project, names("project")), w = field("Work", work, names("work"));
+    const p = field("Project", project, recent("project")), w = field("Work", work, recent("work"));
     const start = () => {
       const [pv, wv] = [p.value.trim(), w.value.trim()];
       if (!pv || !wv) return new Notice("Write a project and a work.");
@@ -174,15 +175,24 @@ class EditModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-// Suggest the names that contain the text. Before you change the text, suggest all names.
+// Before you type (empty or filled-in text), suggest the recent names.
+// When you type, suggest the note names that match, with the same fuzzy search as the file switcher. The best match is first.
 // Obsidian shows the list when the field gets focus or changes.
 // Use "#" fields in classes that extend Obsidian classes: a normal field can replace an Obsidian member.
-class NameSuggest extends AbstractInputSuggest<string> {
-  #names: string[]; #first: string;
-  constructor(app: App, input: HTMLInputElement, names: string[]) { super(app, input); this.#names = names; this.#first = input.value; }
-  getSuggestions(q: string) { return this.#names.filter(n => q === this.#first || n.toLowerCase().includes(q.toLowerCase())); }
-  renderSuggestion(v: string, el: HTMLElement) { el.setText(v); }
-  selectSuggestion(v: string) { this.setValue(v); this.close(); }
+type Suggestion = { name: string; match?: SearchResult };
+class NameSuggest extends AbstractInputSuggest<Suggestion> {
+  #recent: string[]; #first: string;
+  constructor(app: App, input: HTMLInputElement, recent: string[]) { super(app, input); this.#recent = recent; this.#first = input.value; }
+  getSuggestions(q: string): Suggestion[] {
+    if (!q.trim() || q === this.#first) return this.#recent.map(name => ({ name }));
+    const search = prepareFuzzySearch(q.trim());
+    const notes = [...new Set(this.app.vault.getMarkdownFiles().map(f => f.basename))];
+    const found = notes.flatMap(name => { const match = search(name); return match ? [{ name, match }] : []; });
+    sortSearchResults(found);
+    return found;
+  }
+  renderSuggestion(s: Suggestion, el: HTMLElement) { if (s.match) renderResults(el, s.name, s.match); else el.setText(s.name); }
+  selectSuggestion(s: Suggestion) { this.setValue(s.name); this.close(); }
 }
 
 class TimerView extends ItemView {
