@@ -116,15 +116,11 @@ class StartModal extends Modal {
     const entries = this.plugin.data.entries, last = entries[entries.length - 1];
     const project = text(fm?.project) || last?.project || "";
     const work = text(fm?.work) || (project === last?.project ? last.work : "");
-    const recent = (k: "project" | "work") => [...new Set(entries.map(e => e[k]).reverse())]; // Newest first.
-    const field = (name: string, value: string, names: string[]) => {
-      let input!: HTMLInputElement;
-      new Setting(this.contentEl).setName(name).addText(t => { input = t.setValue(value).inputEl; new NameSuggest(this.app, input, names); });
-      return input;
-    };
 
     this.titleEl.setText("Start timer");
-    const p = field("Project", project, recent("project")), w = field("Work", work, recent("work"));
+    const p = field(this.contentEl, "Project", project), w = field(this.contentEl, "Work", work);
+    new NameSuggest(this.app, p, entries, "project");
+    new NameSuggest(this.app, w, entries, "work");
     const start = () => {
       const [pv, wv] = [p.value.trim(), w.value.trim()];
       if (!pv || !wv) return new Notice("Write a project and a work.");
@@ -145,17 +141,16 @@ class EditModal extends Modal {
   constructor(app: App, private plugin: WorkTimer, private e: Entry) { super(app); }
 
   onOpen() {
-    const e = this.e, f = "YYYY-MM-DDTHH:mm";
-    let { project, work } = e, start = moment(e.start).format(f), end = e.end ? moment(e.end).format(f) : "", sure = false;
-    const field = (name: string, value: string, set: (v: string) => void, type = "text") =>
-      new Setting(this.contentEl).setName(name).addText(t => { t.inputEl.type = type; t.setValue(value).onChange(set); });
+    const e = this.e, entries = this.plugin.data.entries, el = this.contentEl, f = "YYYY-MM-DDTHH:mm";
+    let sure = false;
 
     this.titleEl.setText("Edit entry");
-    field("Project", project, v => (project = v));
-    field("Work", work, v => (work = v));
-    field("Start", start, v => (start = v), "datetime-local");
-    field("End", end, v => (end = v), "datetime-local").setDesc(e.end ? "" : "Keep empty to let the timer run.");
-    new Setting(this.contentEl)
+    const p = field(el, "Project", e.project), w = field(el, "Work", e.work);
+    new NameSuggest(this.app, p, entries, "project");
+    new NameSuggest(this.app, w, entries, "work");
+    const start = field(el, "Start", moment(e.start).format(f), "datetime-local");
+    const end = field(el, "End", e.end ? moment(e.end).format(f) : "", "datetime-local", e.end ? "" : "Keep empty to let the timer run.");
+    new Setting(el)
       .addButton(b => b.setButtonText("Delete").setWarning().onClick(async () => {
         if (!sure) { sure = true; b.setButtonText("Click again to delete"); return; }
         this.plugin.data.entries.remove(e);
@@ -163,16 +158,25 @@ class EditModal extends Modal {
         this.close();
       }))
       .addButton(b => b.setButtonText("Save").setCta().onClick(async () => {
-        const s = moment(start, f, true).valueOf();
-        const stop = end ? moment(end, f, true).valueOf() : e.end ? NaN : Date.now();
-        if (!project.trim() || !work.trim() || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
-        Object.assign(e, { project: project.trim(), work: work.trim(), start: s, end: end ? stop : undefined });
+        // Read the fields now: a name selected from the list does not send a change event.
+        const [project, work] = [p.value.trim(), w.value.trim()];
+        const s = moment(start.value, f, true).valueOf();
+        const stop = end.value ? moment(end.value, f, true).valueOf() : e.end ? NaN : Date.now();
+        if (!project || !work || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
+        Object.assign(e, { project, work, start: s, end: end.value ? stop : undefined });
         await this.plugin.save();
         this.close();
       }));
   }
 
   onClose() { this.contentEl.empty(); }
+}
+
+// A text field in a modal. Returns its input.
+function field(el: HTMLElement, name: string, value: string, type = "text", desc = "") {
+  let input!: HTMLInputElement;
+  new Setting(el).setName(name).setDesc(desc).addText(t => { t.inputEl.type = type; input = t.setValue(value).inputEl; });
+  return input;
 }
 
 // Before you type (empty or filled-in text), suggest the recent names.
@@ -182,7 +186,11 @@ class EditModal extends Modal {
 type Suggestion = { name: string; match?: SearchResult };
 class NameSuggest extends AbstractInputSuggest<Suggestion> {
   #recent: string[]; #first: string;
-  constructor(app: App, input: HTMLInputElement, recent: string[]) { super(app, input); this.#recent = recent; this.#first = input.value; }
+  constructor(app: App, input: HTMLInputElement, entries: Entry[], key: "project" | "work") {
+    super(app, input);
+    this.#recent = [...new Set(entries.map(e => e[key]).reverse())]; // Newest first.
+    this.#first = input.value;
+  }
   getSuggestions(q: string): Suggestion[] {
     if (!q.trim() || q === this.#first) return this.#recent.map(name => ({ name }));
     const search = prepareFuzzySearch(q.trim());
