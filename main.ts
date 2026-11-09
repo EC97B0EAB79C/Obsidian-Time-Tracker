@@ -92,7 +92,9 @@ export default class WorkTimer extends Plugin {
   refresh() {
     const e = this.active;
     this.status.setText(e ? `⏱ ${e.project} / ${e.work} ${fmt(dur(e))}` : "");
-    this.app.workspace.getLeavesOfType(VIEW).forEach(l => (l.view as TimerView).render());
+    // A leaf of this type can hold a placeholder: a DeferredView while it is hidden, or an unknown view
+    // while the plugin is off. Only a real TimerView has render().
+    this.app.workspace.getLeavesOfType(VIEW).forEach(l => { if (l.view instanceof TimerView) l.view.render(); });
     this.blocks.forEach(draw => draw());
   }
 
