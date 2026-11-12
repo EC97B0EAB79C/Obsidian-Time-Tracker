@@ -9,7 +9,8 @@ An Obsidian plugin that records the time you use for each project and work.
 - A side view shows the totals for the last 7 days and for all projects.
 - In the side view, click an entry to change its project, work, start or end. You can also delete the entry. The Project and Work fields show the same suggestion list as the Start dialog.
 - A code block in a note shows the totals for a day or a week. The totals update while the timer runs.
-- If a note has the same name as a project or a work, the name is a link to that note.
+- In the side view and in code blocks, each project and work name is a link to the note with the same name. If there is no note, the name looks like an unresolved link. Click it to make the note in your "Default location for new notes" folder. A name with a character that a file name cannot have (for example `#`, `|`, `:`, `/`) is not a link.
+- When you rename a note, the entries with the old name as project or work get the new name, and a message shows how many entries changed. Code blocks that contain the old name do not change.
 - If Obsidian Sync changes the time records from a different device, the plugin reads them again.
 
 ## Start dialog

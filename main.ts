@@ -1,5 +1,5 @@
 import {
-  AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, SearchResult, Setting, WorkspaceLeaf,
+  AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, SearchResult, Setting, TFile, WorkspaceLeaf,
   moment, prepareFuzzySearch, renderResults, sortSearchResults,
 } from "obsidian";
 
@@ -36,6 +36,21 @@ export default class WorkTimer extends Plugin {
     this.addCommand({ id: "open", name: "Open view", callback: () => this.openView() });
     this.registerInterval(window.setInterval(() => this.refresh(), 30000));
 
+    // When a note is renamed, the entries with its old name as project or work get the new name.
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      const old = oldPath.split("/").pop()!.replace(/\.md$/, "");
+      if (!(file instanceof TFile) || file.extension !== "md" || !oldPath.endsWith(".md") || file.basename === old) return;
+      let n = 0;
+      for (const e of this.data.entries) {
+        if (e.project === old || e.work === old) n++;
+        if (e.project === old) e.project = file.basename;
+        if (e.work === old) e.work = file.basename;
+      }
+      if (!n) return;
+      this.save();
+      new Notice(`Changed "${old}" to "${file.basename}" in ${n} ${n === 1 ? "entry" : "entries"}.`);
+    }));
+
     // Summary block in a note: ```work-timer```. The lines "project: X" and "work: Y" select the entries.
     // Other text is the period: "day" or "week" and an optional date. With a project or a work and no period, show all time.
     this.registerMarkdownCodeBlockProcessor("work-timer", (src, el, ctx) => {
@@ -59,7 +74,7 @@ export default class WorkTimer extends Plugin {
         }
         el.empty();
         el.addClass("wt-view");
-        row(this.app, el, label, sum(items), "wt-head");
+        row(this.app, el, label, sum(items), "wt-head", label === by); // A date in the label is not a link.
         if (by) rows(this.app, el, items, f.project ? "work" : "project"); // Project: each work. Work only: each project.
         else tree(this.app, el, items);
       };
@@ -265,11 +280,15 @@ function rows(app: App, el: HTMLElement, items: Entry[], key: "project" | "work"
   totals.forEach((ms, n) => row(app, el, n, ms, "wt-work"));
 }
 
-// If a note has the same name, the name becomes a link to that note.
-function row(app: App, el: HTMLElement, name: string, ms: number, cls: string) {
+// The name is a link to the note with the same name. If there is no note, it looks like an unresolved link,
+// and a click makes the note (like a click on an unresolved link). A name that cannot be a file name is plain text.
+function row(app: App, el: HTMLElement, name: string, ms: number, cls: string, link = true) {
   const r = el.createDiv({ cls: ["wt-row", cls] });
   const n = r.createSpan({ text: name });
-  const file = app.metadataCache.getFirstLinkpathDest(name, "");
-  if (file) { n.addClass("wt-link"); n.onclick = () => app.workspace.getLeaf().openFile(file); }
+  if (link && name && !/[\\/:*?"<>|#^[\]]/.test(name)) {
+    n.addClass("wt-link");
+    if (!app.metadataCache.getFirstLinkpathDest(name, "")) n.addClass("is-unresolved");
+    n.onclick = () => app.workspace.openLinkText(name, "");
+  }
   r.createSpan({ text: fmt(ms) });
 }
