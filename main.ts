@@ -34,6 +34,7 @@ export default class WorkTimer extends Plugin {
     this.addCommand({ id: "start", name: "Start timer", callback: () => new StartModal(this.app, this).open() });
     this.addCommand({ id: "stop", name: "Stop timer", callback: () => this.stop() });
     this.addCommand({ id: "open", name: "Open view", callback: () => this.openView() });
+    this.addCommand({ id: "add", name: "Add time record", callback: () => this.addRecord() });
     this.registerInterval(window.setInterval(() => this.refresh(), 30000));
 
     // When a note is renamed, the entries with its old name as project or work get the new name.
@@ -84,6 +85,13 @@ export default class WorkTimer extends Plugin {
       child.register(() => this.blocks.delete(draw));
       ctx.addChild(child);
     });
+  }
+
+  // Add time that the timer did not record. The dialog fills in the previous project and work, and the last hour.
+  // The record is added only when you click Save.
+  addRecord() {
+    const last = this.data.entries[this.data.entries.length - 1], end = Math.floor(Date.now() / 60000) * 60000;
+    new EditModal(this.app, this, { project: last?.project ?? "", work: last?.work ?? "", start: end - 3600000, end }).open();
   }
 
   async start(project: string, work: string) {
@@ -153,37 +161,40 @@ class StartModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-// Change or delete one entry. "End" is empty only for the timer that runs.
+// Add, change or delete one entry. "End" is empty only for the timer that runs.
+// An entry that is not in the list yet is a new record: no Delete button, and Save adds it.
 class EditModal extends Modal {
   constructor(app: App, private plugin: WorkTimer, private e: Entry) { super(app); }
 
   onOpen() {
     const e = this.e, entries = this.plugin.data.entries, el = this.contentEl, f = "YYYY-MM-DDTHH:mm";
+    const isNew = !entries.includes(e);
     let sure = false;
 
-    this.titleEl.setText("Edit entry");
+    this.titleEl.setText(isNew ? "Add time record" : "Edit entry");
     const p = field(el, "Project", e.project), w = field(el, "Work", e.work);
     new NameSuggest(this.app, p, entries, "project");
     new NameSuggest(this.app, w, entries, "work");
     const start = field(el, "Start", moment(e.start).format(f), "datetime-local");
     const end = field(el, "End", e.end ? moment(e.end).format(f) : "", "datetime-local", e.end ? "" : "Keep empty to let the timer run.");
-    new Setting(el)
-      .addButton(b => b.setButtonText("Delete").setWarning().onClick(async () => {
-        if (!sure) { sure = true; b.setButtonText("Click again to delete"); return; }
-        this.plugin.data.entries.remove(e);
-        await this.plugin.save();
-        this.close();
-      }))
-      .addButton(b => b.setButtonText("Save").setCta().onClick(async () => {
-        // Read the fields now: a name selected from the list does not send a change event.
-        const [project, work] = [p.value.trim(), w.value.trim()];
-        const s = moment(start.value, f, true).valueOf();
-        const stop = end.value ? moment(end.value, f, true).valueOf() : e.end ? NaN : Date.now();
-        if (!project || !work || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
-        Object.assign(e, { project, work, start: s, end: end.value ? stop : undefined });
-        await this.plugin.save();
-        this.close();
-      }));
+    const buttons = new Setting(el);
+    if (!isNew) buttons.addButton(b => b.setButtonText("Delete").setWarning().onClick(async () => {
+      if (!sure) { sure = true; b.setButtonText("Click again to delete"); return; }
+      entries.remove(e);
+      await this.plugin.save();
+      this.close();
+    }));
+    buttons.addButton(b => b.setButtonText("Save").setCta().onClick(async () => {
+      // Read the fields now: a name selected from the list does not send a change event.
+      const [project, work] = [p.value.trim(), w.value.trim()];
+      const s = moment(start.value, f, true).valueOf();
+      const stop = end.value ? moment(end.value, f, true).valueOf() : e.end ? NaN : Date.now();
+      if (!project || !work || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
+      Object.assign(e, { project, work, start: s, end: end.value ? stop : undefined });
+      if (isNew) entries.push(e);
+      await this.plugin.save();
+      this.close();
+    }));
   }
 
   onClose() { this.contentEl.empty(); }
@@ -235,6 +246,7 @@ class TimerView extends ItemView {
 
     const bar = el.createDiv("wt-bar");
     bar.createSpan({ text: a ? `${a.project} / ${a.work}: ${fmt(dur(a))}` : "No timer runs." });
+    bar.createEl("button", { text: "Add", attr: { "aria-label": "Add time record" } }).onclick = () => this.plugin.addRecord();
     bar.createEl("button", { text: a ? "Stop" : "Start" }).onclick = () =>
       a ? this.plugin.stop() : new StartModal(this.app, this.plugin).open();
 

@@ -8,6 +8,7 @@ An Obsidian plugin that records the time you use for each project and work.
 - The status bar shows the timer that runs.
 - A side view shows the totals for the last 7 days and for all projects.
 - In the side view, click an entry to change its project, work, start or end. You can also delete the entry. The Project and Work fields show the same suggestion list as the Start dialog.
+- In the side view, click **Add** (next to **Start** or **Stop**) to add time that the timer did not record, for example a meeting. The dialog fills in the previous project and work and the last hour. The record is added when you click **Save**.
 - A code block in a note shows the totals for a day or a week. The totals update while the timer runs.
 - In the side view and in code blocks, each project and work name is a link to the note with the same name. If there is no note, the name looks like an unresolved link. Click it to make the note in your "Default location for new notes" folder. A name with a character that a file name cannot have (for example `#`, `|`, `:`, `/`) is not a link.
 - When you rename a note, the entries with the old name as project or work get the new name, and a message shows how many entries changed. Code blocks that contain the old name do not change.
@@ -40,6 +41,7 @@ To delete an entry, click **Delete**, then click **Click again to delete**.
 - **Start timer**: Open the dialog. Write a project and a work, then press Enter or click **Start**.
 - **Stop timer**: Stop the timer that runs.
 - **Open view**: Open the side view. You can also click the timer icon in the ribbon.
+- **Add time record**: Open the dialog to add a time record, the same as the **Add** button in the side view.
 
 ## Code block
 

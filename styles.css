@@ -2,6 +2,7 @@
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: 8px 10px; border-radius: 6px; background: var(--background-secondary);
 }
+.wt-bar > span { flex: 1; }
 .wt-row, .wt-day > summary { display: flex; justify-content: space-between; padding: 2px 0; }
 .wt-row > span:last-child, .wt-day > summary > span:last-child { font-variant-numeric: tabular-nums; }
 .wt-day > summary { cursor: pointer; font-weight: 600; }
