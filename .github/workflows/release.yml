@@ -1,4 +1,4 @@
-# Push a tag with the plugin version (for example 0.3.1) to make a release.
+# Push a tag with the plugin version (for example 0.4.1) to make a release.
 name: Release
 
 on:
