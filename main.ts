@@ -1,5 +1,5 @@
 import {
-  AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, SearchResult, Setting, WorkspaceLeaf,
+  AbstractInputSuggest, App, ItemView, MarkdownRenderChild, Modal, Notice, Plugin, SearchResult, Setting, TFile, WorkspaceLeaf,
   moment, prepareFuzzySearch, renderResults, sortSearchResults,
 } from "obsidian";
 
@@ -34,7 +34,23 @@ export default class WorkTimer extends Plugin {
     this.addCommand({ id: "start", name: "Start timer", callback: () => new StartModal(this.app, this).open() });
     this.addCommand({ id: "stop", name: "Stop timer", callback: () => this.stop() });
     this.addCommand({ id: "open", name: "Open view", callback: () => this.openView() });
+    this.addCommand({ id: "add", name: "Add time record", callback: () => this.addRecord() });
     this.registerInterval(window.setInterval(() => this.refresh(), 30000));
+
+    // When a note is renamed, the entries with its old name as project or work get the new name.
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      const old = oldPath.split("/").pop()!.replace(/\.md$/, "");
+      if (!(file instanceof TFile) || file.extension !== "md" || !oldPath.endsWith(".md") || file.basename === old) return;
+      let n = 0;
+      for (const e of this.data.entries) {
+        if (e.project === old || e.work === old) n++;
+        if (e.project === old) e.project = file.basename;
+        if (e.work === old) e.work = file.basename;
+      }
+      if (!n) return;
+      this.save();
+      new Notice(`Changed "${old}" to "${file.basename}" in ${n} ${n === 1 ? "entry" : "entries"}.`);
+    }));
 
     // Summary block in a note: ```work-timer```. The lines "project: X" and "work: Y" select the entries.
     // Other text is the period: "day" or "week" and an optional date. With a project or a work and no period, show all time.
@@ -59,7 +75,7 @@ export default class WorkTimer extends Plugin {
         }
         el.empty();
         el.addClass("wt-view");
-        row(this.app, el, label, sum(items), "wt-head");
+        row(this.app, el, label, sum(items), "wt-head", label === by); // A date in the label is not a link.
         if (by) rows(this.app, el, items, f.project ? "work" : "project"); // Project: each work. Work only: each project.
         else tree(this.app, el, items);
       };
@@ -69,6 +85,13 @@ export default class WorkTimer extends Plugin {
       child.register(() => this.blocks.delete(draw));
       ctx.addChild(child);
     });
+  }
+
+  // Add time that the timer did not record. The dialog fills in the previous project and work, and the last hour.
+  // The record is added only when you click Save.
+  addRecord() {
+    const last = this.data.entries[this.data.entries.length - 1], end = Math.floor(Date.now() / 60000) * 60000;
+    new EditModal(this.app, this, { project: last?.project ?? "", work: last?.work ?? "", start: end - 3600000, end }).open();
   }
 
   async start(project: string, work: string) {
@@ -92,7 +115,9 @@ export default class WorkTimer extends Plugin {
   refresh() {
     const e = this.active;
     this.status.setText(e ? `⏱ ${e.project} / ${e.work} ${fmt(dur(e))}` : "");
-    this.app.workspace.getLeavesOfType(VIEW).forEach(l => (l.view as TimerView).render());
+    // A leaf of this type can hold a placeholder: a DeferredView while it is hidden, or an unknown view
+    // while the plugin is off. Only a real TimerView has render().
+    this.app.workspace.getLeavesOfType(VIEW).forEach(l => { if (l.view instanceof TimerView) l.view.render(); });
     this.blocks.forEach(draw => draw());
   }
 
@@ -136,37 +161,40 @@ class StartModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-// Change or delete one entry. "End" is empty only for the timer that runs.
+// Add, change or delete one entry. "End" is empty only for the timer that runs.
+// An entry that is not in the list yet is a new record: no Delete button, and Save adds it.
 class EditModal extends Modal {
   constructor(app: App, private plugin: WorkTimer, private e: Entry) { super(app); }
 
   onOpen() {
     const e = this.e, entries = this.plugin.data.entries, el = this.contentEl, f = "YYYY-MM-DDTHH:mm";
+    const isNew = !entries.includes(e);
     let sure = false;
 
-    this.titleEl.setText("Edit entry");
+    this.titleEl.setText(isNew ? "Add time record" : "Edit entry");
     const p = field(el, "Project", e.project), w = field(el, "Work", e.work);
     new NameSuggest(this.app, p, entries, "project");
     new NameSuggest(this.app, w, entries, "work");
     const start = field(el, "Start", moment(e.start).format(f), "datetime-local");
     const end = field(el, "End", e.end ? moment(e.end).format(f) : "", "datetime-local", e.end ? "" : "Keep empty to let the timer run.");
-    new Setting(el)
-      .addButton(b => b.setButtonText("Delete").setWarning().onClick(async () => {
-        if (!sure) { sure = true; b.setButtonText("Click again to delete"); return; }
-        this.plugin.data.entries.remove(e);
-        await this.plugin.save();
-        this.close();
-      }))
-      .addButton(b => b.setButtonText("Save").setCta().onClick(async () => {
-        // Read the fields now: a name selected from the list does not send a change event.
-        const [project, work] = [p.value.trim(), w.value.trim()];
-        const s = moment(start.value, f, true).valueOf();
-        const stop = end.value ? moment(end.value, f, true).valueOf() : e.end ? NaN : Date.now();
-        if (!project || !work || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
-        Object.assign(e, { project, work, start: s, end: end.value ? stop : undefined });
-        await this.plugin.save();
-        this.close();
-      }));
+    const buttons = new Setting(el);
+    if (!isNew) buttons.addButton(b => b.setButtonText("Delete").setWarning().onClick(async () => {
+      if (!sure) { sure = true; b.setButtonText("Click again to delete"); return; }
+      entries.remove(e);
+      await this.plugin.save();
+      this.close();
+    }));
+    buttons.addButton(b => b.setButtonText("Save").setCta().onClick(async () => {
+      // Read the fields now: a name selected from the list does not send a change event.
+      const [project, work] = [p.value.trim(), w.value.trim()];
+      const s = moment(start.value, f, true).valueOf();
+      const stop = end.value ? moment(end.value, f, true).valueOf() : e.end ? NaN : Date.now();
+      if (!project || !work || !(stop > s)) return new Notice("Write a project, a work and a correct time.");
+      Object.assign(e, { project, work, start: s, end: end.value ? stop : undefined });
+      if (isNew) entries.push(e);
+      await this.plugin.save();
+      this.close();
+    }));
   }
 
   onClose() { this.contentEl.empty(); }
@@ -218,6 +246,7 @@ class TimerView extends ItemView {
 
     const bar = el.createDiv("wt-bar");
     bar.createSpan({ text: a ? `${a.project} / ${a.work}: ${fmt(dur(a))}` : "No timer runs." });
+    bar.createEl("button", { text: "Add", attr: { "aria-label": "Add time record" } }).onclick = () => this.plugin.addRecord();
     bar.createEl("button", { text: a ? "Stop" : "Start" }).onclick = () =>
       a ? this.plugin.stop() : new StartModal(this.app, this.plugin).open();
 
@@ -263,11 +292,15 @@ function rows(app: App, el: HTMLElement, items: Entry[], key: "project" | "work"
   totals.forEach((ms, n) => row(app, el, n, ms, "wt-work"));
 }
 
-// If a note has the same name, the name becomes a link to that note.
-function row(app: App, el: HTMLElement, name: string, ms: number, cls: string) {
+// The name is a link to the note with the same name. If there is no note, it looks like an unresolved link,
+// and a click makes the note (like a click on an unresolved link). A name that cannot be a file name is plain text.
+function row(app: App, el: HTMLElement, name: string, ms: number, cls: string, link = true) {
   const r = el.createDiv({ cls: ["wt-row", cls] });
   const n = r.createSpan({ text: name });
-  const file = app.metadataCache.getFirstLinkpathDest(name, "");
-  if (file) { n.addClass("wt-link"); n.onclick = () => app.workspace.getLeaf().openFile(file); }
+  if (link && name && !/[\\/:*?"<>|#^[\]]/.test(name)) {
+    n.addClass("wt-link");
+    if (!app.metadataCache.getFirstLinkpathDest(name, "")) n.addClass("is-unresolved");
+    n.onclick = () => app.workspace.openLinkText(name, "");
+  }
   r.createSpan({ text: fmt(ms) });
 }

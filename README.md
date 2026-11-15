@@ -8,8 +8,10 @@ An Obsidian plugin that records the time you use for each project and work.
 - The status bar shows the timer that runs.
 - A side view shows the totals for the last 7 days and for all projects.
 - In the side view, click an entry to change its project, work, start or end. You can also delete the entry. The Project and Work fields show the same suggestion list as the Start dialog.
+- In the side view, click **Add** (next to **Start** or **Stop**) to add time that the timer did not record, for example a meeting. The dialog fills in the previous project and work and the last hour. The record is added when you click **Save**.
 - A code block in a note shows the totals for a day or a week. The totals update while the timer runs.
-- If a note has the same name as a project or a work, the name is a link to that note.
+- In the side view and in code blocks, each project and work name is a link to the note with the same name. If there is no note, the name looks like an unresolved link. Click it to make the note in your "Default location for new notes" folder. A name with a character that a file name cannot have (for example `#`, `|`, `:`, `/`) is not a link.
+- When you rename a note, the entries with the old name as project or work get the new name, and a message shows how many entries changed. Code blocks that contain the old name do not change.
 - If Obsidian Sync changes the time records from a different device, the plugin reads them again.
 
 ## Start dialog
@@ -39,6 +41,7 @@ To delete an entry, click **Delete**, then click **Click again to delete**.
 - **Start timer**: Open the dialog. Write a project and a work, then press Enter or click **Start**.
 - **Stop timer**: Stop the timer that runs.
 - **Open view**: Open the side view. You can also click the timer icon in the ribbon.
+- **Add time record**: Open the dialog to add a time record, the same as the **Add** button in the side view.
 
 ## Code block
 
@@ -75,7 +78,7 @@ project: Alpha
 ### From a release
 
 1. Open the [latest release](https://github.com/EC97B0EAB79C/Obsidian-Time-Tracker/releases/latest).
-2. Download `work-timer-<version>.zip`, for example `work-timer-0.3.0.zip`.
+2. Download `work-timer-<version>.zip`, for example `work-timer-0.4.0.zip`.
 3. Extract the zip into `<vault>/.obsidian/plugins/`. This makes the folder `work-timer` with 3 files. The `.obsidian` folder is hidden. Show hidden files to see it.
 4. Restart Obsidian.
 5. Open **Settings > Community plugins**. If **Restricted mode** is on, turn it off.
@@ -110,6 +113,6 @@ This makes `main.js`. Use `npm run dev` to build again each time you change `mai
 
 1. Set the new version in `manifest.json`, `package.json` and `versions.json`.
 2. Push the changes.
-3. Push a tag with the same version, for example `0.3.1`. Do not use a `v` before the number.
+3. Push a tag with the same version, for example `0.4.1`. Do not use a `v` before the number.
 
 GitHub Actions then builds the plugin and makes a release with `main.js`, `manifest.json`, `styles.css` and `work-timer-<version>.zip`. Obsidian and BRAT use the 3 files. The zip is for manual install. If the tag and the version in `manifest.json` are different, the workflow stops and makes no release.
