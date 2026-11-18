@@ -68,8 +68,8 @@ project: Alpha
 ````
 
 - `project: Alpha` shows the total time of the project and the time of each work in it.
-- `project: Alpha` and `work: Design` show only the time of the work "Design" in the project "Alpha".
-- `work: Design` (with no project) shows the time of this work in each project.
+- `project: Alpha` and `work: Design` show the total time of the work "Design" in the project "Alpha", and its time on each day (newest day first).
+- `work: Design` (with no project) shows the same for the work "Design" in all projects.
 - The name must be the same as in the entries, with the same upper-case and lower-case letters. You can also write a link, for example `project: [[Alpha]]`.
 - These blocks show all time. To show only one day or one week, also add a `day` or `week` line, for example `week 2026-10-31`.
 

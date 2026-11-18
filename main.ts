@@ -12,6 +12,7 @@ const dur = (e: Entry) => (e.end ?? Date.now()) - e.start;
 const dayStart = (t: number) => new Date(t).setHours(0, 0, 0, 0);
 const sum = (items: Entry[]) => items.reduce((s, e) => s + dur(e), 0);
 const time = (t: number) => moment(t).format("LT");
+const day = (t: number) => moment(t).format(moment(t).isSame(moment(), "year") ? "ddd D MMM" : "ddd D MMM YYYY");
 // Frontmatter can hold a number, a list or a link. Get the plain text.
 const text = (v: unknown) => String([v].flat(2)[0] ?? "").replace(/^\[\[([^|\]]*).*\]\]$/, "$1");
 
@@ -54,6 +55,7 @@ export default class WorkTimer extends Plugin {
 
     // Summary block in a note: ```work-timer```. The lines "project: X" and "work: Y" select the entries.
     // Other text is the period: "day" or "week" and an optional date. With a project or a work and no period, show all time.
+    // A project shows the time of each work. A work (a part of a project) shows the time of each day.
     this.registerMarkdownCodeBlockProcessor("work-timer", (src, el, ctx) => {
       const draw = () => {
         const f: Record<string, string | undefined> = {};
@@ -63,7 +65,7 @@ export default class WorkTimer extends Plugin {
         }).trim();
         const by = f.project || f.work;
         let items = this.data.entries.filter(e => (!f.project || e.project === f.project) && (!f.work || e.work === f.work));
-        let label = by ?? "";
+        let label = [f.project, f.work].filter(Boolean).join(" / ");
         if (period || !by) {
           const [mode, date] = period.split(/\s+/);
           const name = ctx.sourcePath.split("/").pop()!.replace(/\.md$/, "");
@@ -71,12 +73,13 @@ export default class WorkTimer extends Plugin {
           const last = (m.isValid() ? m : moment()).startOf("day");
           const first = last.clone().subtract(mode === "week" ? 6 : 0, "days");
           items = items.filter(e => e.start >= first.valueOf() && e.start < last.clone().add(1, "day").valueOf());
-          label = [by, mode === "week" ? `${first.format("D MMM")} to ${last.format("D MMM")}` : last.format("ddd D MMM")].filter(Boolean).join(" · ");
+          label = [label, mode === "week" ? `${first.format("D MMM")} to ${last.format("D MMM")}` : last.format("ddd D MMM")].filter(Boolean).join(" · ");
         }
         el.empty();
         el.addClass("wt-view");
-        row(this.app, el, label, sum(items), "wt-head", label === by); // A date in the label is not a link.
-        if (by) rows(this.app, el, items, f.project ? "work" : "project"); // Project: each work. Work only: each project.
+        row(this.app, el, label, sum(items), "wt-head", label === by); // A single name is a link. "Project / work" or a date is not.
+        if (f.work) rows(this.app, el, [...items].sort((a, b) => b.start - a.start), e => day(e.start), false); // Newest day first.
+        else if (f.project) rows(this.app, el, items, e => e.work);
         else tree(this.app, el, items);
       };
       draw();
@@ -281,15 +284,15 @@ function tree(app: App, el: HTMLElement, items: Entry[]) {
   if (!items.length) { el.createDiv({ cls: "wt-empty", text: "No time recorded." }); return; }
   const projects = new Map<string, Entry[]>();
   items.forEach(e => projects.set(e.project, [...(projects.get(e.project) ?? []), e]));
-  projects.forEach((pItems, p) => { row(app, el, p, sum(pItems), "wt-project"); rows(app, el, pItems, "work"); });
+  projects.forEach((pItems, p) => { row(app, el, p, sum(pItems), "wt-project"); rows(app, el, pItems, e => e.work); });
 }
 
-// One indented row for each project or work, with its total.
-function rows(app: App, el: HTMLElement, items: Entry[], key: "project" | "work") {
+// One indented row for each name that "key" gives (a work or a day), with its total. In the order of the items.
+function rows(app: App, el: HTMLElement, items: Entry[], key: (e: Entry) => string, link = true) {
   if (!items.length) { el.createDiv({ cls: "wt-empty", text: "No time recorded." }); return; }
   const totals = new Map<string, number>();
-  items.forEach(e => totals.set(e[key], (totals.get(e[key]) ?? 0) + dur(e)));
-  totals.forEach((ms, n) => row(app, el, n, ms, "wt-work"));
+  items.forEach(e => totals.set(key(e), (totals.get(key(e)) ?? 0) + dur(e)));
+  totals.forEach((ms, n) => row(app, el, n, ms, "wt-work", link));
 }
 
 // The name is a link to the note with the same name. If there is no note, it looks like an unresolved link,
